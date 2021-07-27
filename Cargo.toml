@@ -1,0 +1,29 @@
+[package]
+name = "media_pipeline"
+version = "0.1.0"
+authors = ["David DiMaria <david.dimaria@conduit.vc>"]
+edition = "2018"
+
+
+[dependencies]
+env_logger = "0.8.4"
+log = "0.4.14"
+gstreamer = "0.17"
+gstreamer-base = "0.17" # TODO: consider removing
+gstreamer-video = "0.17" # TODO: consider removing
+proxy = { path = "../proxy" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.24"
+
+[[bin]]
+name = "audio"
+path = "src/audio.rs"
+
+[[bin]]
+name = "audiovideo"
+path = "src/audiovideo.rs"
+
+[[bin]]
+name = "video"
+path = "src/video.rs"
