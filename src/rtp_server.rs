@@ -1,14 +1,10 @@
-pub(crate) mod runloop;
+use anyhow::Error;
+use byte_slice_cast::*;
+use bytes::Bytes;
+use derive_more::{Display, Error};
 use gstreamer::element_error;
 use gstreamer::prelude::*;
-
-use byte_slice_cast::*;
-
-use std::i16;
-use std::i32;
-
-use anyhow::Error;
-use derive_more::{Display, Error};
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 #[derive(Debug, Display, Error)]
 #[display(fmt = "Missing element {}", _0)]
@@ -23,7 +19,7 @@ struct ErrorMessage {
     source: glib::Error,
 }
 
-fn create_pipeline() -> Result<gstreamer::Pipeline, Error> {
+fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> {
     gstreamer::init()?;
 
     let pipeline = gstreamer::parse_launch(&format!(
@@ -43,11 +39,12 @@ fn create_pipeline() -> Result<gstreamer::Pipeline, Error> {
     appsink.set_callbacks(
         gstreamer_app::AppSinkCallbacks::builder()
             // Add a handler to the "new-sample" signal.
-            .new_sample(|appsink| {
+            .new_sample(move |appsink| {
                 // Pull the sample in question out of the appsink's buffer.
                 let sample = appsink
                     .pull_sample()
                     .map_err(|_| gstreamer::FlowError::Eos)?;
+
                 let buffer = sample.buffer().ok_or_else(|| {
                     element_error!(
                         appsink,
@@ -88,7 +85,8 @@ fn create_pipeline() -> Result<gstreamer::Pipeline, Error> {
                     gstreamer::FlowError::Error
                 })?;
 
-                println!("{:?}", samples);
+                // TODO: remove unwrap
+                sender.send(Bytes::from(samples.to_owned())).unwrap();
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })
@@ -132,14 +130,40 @@ fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
     Ok(())
 }
 
-fn example_main() {
-    match create_pipeline().and_then(main_loop) {
-        Ok(r) => r,
-        Err(e) => eprintln!("Error! {}", e),
-    }
+pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
+    let _ = env_logger::try_init();
+    let (send, recv) = channel::<Bytes>();
+    let sender_outbound = send.clone();
+
+    std::thread::spawn(|| {
+        match create_pipeline(send).and_then(main_loop) {
+            Ok(r) => r,
+            Err(e) => eprintln!("Error! {}", e),
+        };
+    });
+
+    (sender_outbound, recv)
 }
 
-fn main() {
-    let _ = env_logger::try_init();
-    crate::runloop::run(example_main);
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn it_starts() {
+        let (tx, rx) = start();
+        let mut count = 0;
+        let max = 10;
+
+        while let Ok(_bytes) = rx.recv() {
+            count += 1;
+
+            if count >= max {
+                break;
+            }
+        }
+
+        assert_eq!(count, max);
+    }
 }
