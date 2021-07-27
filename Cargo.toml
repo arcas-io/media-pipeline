@@ -6,9 +6,15 @@ edition = "2018"
 
 
 [dependencies]
+anyhow = "1.0"
+byte-slice-cast = "1"
+derive_more = "0.99.5"
 env_logger = "0.8.4"
 log = "0.4.14"
 gstreamer = "0.17"
+glib = "0.14"
+gstreamer-app = "0.17" 
+gstreamer-audio = "0.17" 
 gstreamer-base = "0.17" # TODO: consider removing
 gstreamer-video = "0.17" # TODO: consider removing
 proxy = { path = "../proxy" }
@@ -23,6 +29,10 @@ path = "src/audio.rs"
 [[bin]]
 name = "audiovideo"
 path = "src/audiovideo.rs"
+
+[[bin]]
+name = "rtp_server"
+path = "src/rtp_server.rs"
 
 [[bin]]
 name = "video"
