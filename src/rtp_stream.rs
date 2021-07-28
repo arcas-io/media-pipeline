@@ -151,7 +151,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_starts() {
+    fn it_streams_rtp() {
         let (tx, rx) = start();
         let mut count = 0;
         let max = 10;

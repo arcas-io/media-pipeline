@@ -21,17 +21,23 @@ struct ErrorMessage {
 
 fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> {
     gstreamer::init()?;
+    log::info!("create_pipeline 1");
 
     let pipeline = gstreamer::parse_launch(&format!(
-        "videotestsrc ! x264enc tune=zerolatency ! rtph264pay ! udpsink port=5000 host=127.0.0.1"
+        "udpsrc port=5000 ! application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264, payload=(int)96
+        ! rtph264depay ! h264parse
+        ! tee name=t
+        t. ! queue ! mp4mux ! filesink location=xyz.mp4 -e"
     ))?
     .downcast::<gstreamer::Pipeline>()
     .expect("Expected a gst::Pipeline");
+    log::info!("create_pipeline 2");
 
     Ok(pipeline)
 }
 
 fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
+    log::info!("main loop");
     pipeline.set_state(gstreamer::State::Playing)?;
 
     let bus = pipeline
@@ -41,7 +47,7 @@ fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
     for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
         use gstreamer::MessageView;
 
-        match msg.view() {
+        let view = match msg.view() {
             MessageView::Eos(..) => break,
             MessageView::Error(err) => {
                 pipeline.set_state(gstreamer::State::Null)?;
@@ -57,7 +63,9 @@ fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
                 .into());
             }
             _ => (),
-        }
+        };
+
+        log::info!("{:?}", view);
     }
 
     pipeline.set_state(gstreamer::State::Null)?;
@@ -67,8 +75,11 @@ fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
 
 pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
     let _ = env_logger::try_init();
+    log::info!("start 1");
     let (send, recv) = channel::<Bytes>();
+    log::info!("start 2");
     let sender_outbound = send.clone();
+    log::info!("start 3");
 
     std::thread::spawn(|| {
         match create_pipeline(send).and_then(main_loop) {
@@ -76,6 +87,7 @@ pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
             Err(e) => eprintln!("Error! {}", e),
         };
     });
+    log::info!("start 4");
 
     (sender_outbound, recv)
 }
@@ -86,18 +98,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_serves_rtp_via_udp() {
+    fn it_records_rtp_via_udp() {
+        let _ = env_logger::try_init();
+        log::info!("it_records_rtp_via_udp 1");
         let (tx, rx) = start();
+        log::info!("it_records_rtp_via_udp 2");
         let mut count = 0;
         let max = 10;
 
         while let Ok(_bytes) = rx.recv() {
+            log::info!("it_records_rtp_via_udp loop");
             count += 1;
 
             if count >= max {
                 break;
             }
         }
+        log::info!("it_records_rtp_via_udp 3");
 
         assert_eq!(count, max);
     }
