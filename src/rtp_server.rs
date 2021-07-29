@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn it_starts() {
-        let (tx, rx) = start();
+        let (_tx, rx) = start();
         let mut count = 0;
         let max = 10;
 
