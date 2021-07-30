@@ -74,7 +74,7 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
 
                 // We know what format the data in the memory region has, since we requested
                 // it by setting the appsink's caps. So what we do here is interpret the
-                // memory region we mapped as an array of signed 16 bit integers.
+                // memory region we mapped as an array of u8 packets.
                 let samples = map.as_slice_of::<u8>().map_err(|_| {
                     element_error!(
                         appsink,
@@ -85,8 +85,13 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
                     gstreamer::FlowError::Error
                 })?;
 
-                // TODO: remove unwrap
-                sender.send(Bytes::from(samples.to_owned())).unwrap();
+                // it's not really an error below, just the receiver gets dropped
+                sender.send(Bytes::from(samples.to_owned())).map_err(|_| {
+                    element_error!(
+                        appsink,
+                        gstreamer::ResourceError::Failed,
+                        ("Failed sending packets to the channel")
+                    )});
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })
