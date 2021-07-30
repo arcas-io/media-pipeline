@@ -23,7 +23,7 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
     gstreamer::init()?;
 
     let pipeline = gstreamer::parse_launch(&format!(
-        "videotestsrc ! x264enc tune=zerolatency ! rtph264pay ! appsink name=sink"
+        "videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! appsink name=sink"
     ))?
     .downcast::<gstreamer::Pipeline>()
     .expect("Expected a gst::Pipeline");
