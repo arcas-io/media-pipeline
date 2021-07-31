@@ -24,10 +24,13 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
     log::info!("create_pipeline 1");
 
     let pipeline = gstreamer::parse_launch(&format!(
-        "udpsrc port=5000 ! application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264, payload=(int)96
-        ! rtph264depay ! h264parse
-        ! tee name=t
-        t. ! queue ! mp4mux ! filesink location=xyz.mp4 -e"
+        "udpsrc port=5000  \
+            ! application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264, payload=(int)96
+            ! queue  \
+                ! rtph264depay name=pay0 \
+                ! h264parse config-interval=-1 \
+                ! mp4mux \
+            ! filesink location=test.mp4"
     ))?
     .downcast::<gstreamer::Pipeline>()
     .expect("Expected a gst::Pipeline");
@@ -38,35 +41,58 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
 
 fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
     log::info!("main loop");
+    let main_loop = glib::MainLoop::new(None, false);
     pipeline.set_state(gstreamer::State::Playing)?;
 
     let bus = pipeline
         .bus()
         .expect("Pipeline without bus. Shouldn't happen!");
 
-    for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
+    let pipeline_weak = pipeline.downgrade();
+    
+    glib::timeout_add_seconds(15, move || {
+        let pipeline = match pipeline_weak.upgrade() {
+            Some(pipeline) => pipeline,
+            None => return glib::Continue(false),
+        };
+
+        println!("sending eos");
+
+        pipeline.send_event(gstreamer::event::Eos::new());
+
+        glib::Continue(false)
+    });
+
+    let main_loop_clone = main_loop.clone();
+
+    bus.add_watch(move |_, msg| {
         use gstreamer::MessageView;
+        let main_loop = &main_loop_clone;
 
         let view = match msg.view() {
-            MessageView::Eos(..) => break,
+            MessageView::Eos(..) => {
+                println!("received eos");
+                // An EndOfStream event was sent to the pipeline, so we tell our main loop
+                // to stop execution here.
+                main_loop.quit()
+            }
             MessageView::Error(err) => {
-                pipeline.set_state(gstreamer::State::Null)?;
-                return Err(ErrorMessage {
-                    src: msg
-                        .src()
-                        .map(|s| String::from(s.path_string()))
-                        .unwrap_or_else(|| String::from("None")),
-                    error: err.error().to_string(),
-                    debug: err.debug(),
-                    source: err.error(),
-                }
-                .into());
+                println!(
+                    "Error from {:?}: {} ({:?})",
+                    err.src().map(|s| s.path_string()),
+                    err.error(),
+                    err.debug()
+                );
+                main_loop.quit();
             }
             _ => (),
         };
 
-        log::info!("{:?}", view);
-    }
+        glib::Continue(true)
+    })
+    .expect("Failed to add bus watch");
+
+    main_loop.run();
 
     pipeline.set_state(gstreamer::State::Null)?;
 
