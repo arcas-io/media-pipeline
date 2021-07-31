@@ -91,7 +91,8 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
                         appsink,
                         gstreamer::ResourceError::Failed,
                         ("Failed sending packets to the channel")
-                    )});
+                    )
+                });
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })

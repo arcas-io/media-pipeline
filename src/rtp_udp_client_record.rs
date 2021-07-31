@@ -49,7 +49,7 @@ fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
         .expect("Pipeline without bus. Shouldn't happen!");
 
     let pipeline_weak = pipeline.downgrade();
-    
+
     glib::timeout_add_seconds(15, move || {
         let pipeline = match pipeline_weak.upgrade() {
             Some(pipeline) => pipeline,
