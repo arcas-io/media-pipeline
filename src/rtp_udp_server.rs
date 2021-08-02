@@ -1,8 +1,6 @@
 use anyhow::Error;
-use byte_slice_cast::*;
 use bytes::Bytes;
 use derive_more::{Display, Error};
-use gstreamer::element_error;
 use gstreamer::prelude::*;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
@@ -19,7 +17,7 @@ struct ErrorMessage {
     source: glib::Error,
 }
 
-fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> {
+fn create_pipeline(_sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> {
     gstreamer::init()?;
 
     let pipeline = gstreamer::parse_launch(&format!(

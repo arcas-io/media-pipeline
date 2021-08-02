@@ -86,13 +86,13 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
                 })?;
 
                 // it's not really an error below, just the receiver gets dropped
-                sender.send(Bytes::from(samples.to_owned())).map_err(|_| {
+                if let Err(_) = sender.send(Bytes::from(samples.to_owned())) {
                     element_error!(
                         appsink,
                         gstreamer::ResourceError::Failed,
                         ("Failed sending packets to the channel")
                     )
-                });
+                };
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })

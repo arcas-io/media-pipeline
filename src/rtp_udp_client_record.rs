@@ -1,5 +1,4 @@
 use anyhow::Error;
-use bytes::Bytes;
 use derive_more::{Display, Error};
 use gstreamer::prelude::*;
 use gstreamer::Pipeline;
@@ -23,9 +22,8 @@ pub enum Command {
     Stopped,
 }
 
-fn create_pipeline() -> Result<gstreamer::Pipeline, Error> {
+fn create_pipeline(filename: &str) -> Result<gstreamer::Pipeline, Error> {
     gstreamer::init()?;
-    log::info!("create_pipeline 1");
 
     let pipeline = gstreamer::parse_launch(&format!(
         "udpsrc port=5000  \
@@ -34,11 +32,11 @@ fn create_pipeline() -> Result<gstreamer::Pipeline, Error> {
                 ! rtph264depay name=pay0 \
                 ! h264parse config-interval=-1 \
                 ! mp4mux \
-            ! filesink location=test.mp4"
+            ! filesink location={}",
+            filename
     ))?
     .downcast::<gstreamer::Pipeline>()
     .expect("Expected a gst::Pipeline");
-    log::info!("create_pipeline 2");
 
     Ok(pipeline)
 }
@@ -48,7 +46,6 @@ fn main_loop(
     sender: Sender<Command>,
     receiver: Receiver<Command>,
 ) -> Result<glib::MainLoop, Error> {
-    log::info!("main loop");
     let main_loop = glib::MainLoop::new(None, false);
     pipeline.set_state(gstreamer::State::Playing)?;
 
@@ -65,7 +62,7 @@ fn main_loop(
                 Command::Stop => {
                     let pipeline = pipeline_weak.upgrade().unwrap();
 
-                    println!("sending eos");
+                    log::info!("sending eos");
 
                     pipeline.send_event(gstreamer::event::Eos::new());
 
@@ -77,19 +74,6 @@ fn main_loop(
         }
     });
 
-    // glib::timeout_add_seconds(1, move || {
-    //     let pipeline = match pipeline_weak.upgrade() {
-    //         Some(pipeline) => pipeline,
-    //         None => return glib::Continue(false),
-    //     };
-
-    //     println!("sending eos");
-
-    //     pipeline.send_event(gstreamer::event::Eos::new());
-
-    //     glib::Continue(false)
-    // });
-
     let main_loop_clone = main_loop.clone();
 
     bus.add_watch(move |_, msg| {
@@ -98,13 +82,13 @@ fn main_loop(
 
         let _view = match msg.view() {
             MessageView::Eos(..) => {
-                println!("received eos");
+                log::info!("received eos");
                 // An EndOfStream event was sent to the pipeline, so we tell our main loop
                 // to stop execution here.
                 main_loop.quit()
             }
             MessageView::Error(err) => {
-                println!(
+                log::error!(
                     "Error from {:?}: {} ({:?})",
                     err.src().map(|s| s.path_string()),
                     err.error(),
@@ -126,27 +110,14 @@ fn main_loop(
     Ok(main_loop)
 }
 
-pub fn stop(pipeline: Pipeline) -> Result<(), Error> {
-    log::info!("stop");
-
-    let pipeline_weak = pipeline.downgrade();
-    let pipeline = pipeline_weak.upgrade().unwrap();
-
-    println!("sending eos");
-
-    pipeline.send_event(gstreamer::event::Eos::new());
-
-    glib::Continue(false);
-
-    Ok(())
-}
-
-pub fn start(sender: Sender<Command>, receiver: Receiver<Command>) -> Result<(), Error> {
+pub fn record(
+    filename: &str,
+    sender: Sender<Command>,
+    receiver: Receiver<Command>,
+) -> Result<(), Error> {
     let _ = env_logger::try_init();
-    log::info!("start 1");
-    log::info!("start 2");
 
-    create_pipeline()
+    create_pipeline(filename)
         .and_then(|pipeline| main_loop(pipeline, sender, receiver))
         .unwrap();
 
@@ -157,19 +128,20 @@ pub fn start(sender: Sender<Command>, receiver: Receiver<Command>) -> Result<(),
 mod tests {
 
     use super::*;
+    use std::path::Path;
     use std::thread::sleep;
     use std::time::Duration;
 
     #[test]
     fn it_records_rtp_via_udp() {
         let _ = env_logger::try_init();
-        log::info!("it_records_rtp_via_udp 1");
 
+        let filename = "test/output/it_records_rtp_via_udp.mp4";
         let (tx, rx) = std::sync::mpsc::channel::<Command>();
         let sender = tx.clone();
 
-        std::thread::spawn(|| {
-            start(sender, rx).unwrap();
+        std::thread::spawn(move || {
+            record(filename, sender, rx).unwrap();
         });
 
         // record for 2 seconds
@@ -182,6 +154,6 @@ mod tests {
         // TODO: receive message from the main loop rather than wait
         sleep(Duration::from_millis(1000));
 
-        // assert_eq!(count, max);
+        assert!(Path::new(filename).exists());
     }
 }

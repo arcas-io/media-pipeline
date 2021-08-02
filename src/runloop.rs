@@ -1,6 +1,7 @@
 /// macOS has a specific requirement that there must be a run loop running
 /// on the main thread in order to open windows and use OpenGL.
 
+#[allow(dead_code)]
 #[cfg(target_os = "macos")]
 pub mod runloop {
     use std::os::raw::c_void;
@@ -47,6 +48,7 @@ where
     main()
 }
 
+#[allow(dead_code)]
 #[cfg(target_os = "macos")]
 pub fn run<T, F: FnOnce() -> T + Send + 'static>(main: F) -> T
 where
