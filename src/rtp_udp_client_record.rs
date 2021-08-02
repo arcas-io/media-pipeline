@@ -22,7 +22,7 @@ pub enum Command {
     Stopped,
 }
 
-fn create_pipeline(filename: &str) -> Result<gstreamer::Pipeline, Error> {
+fn create_pipeline(filename: &str) -> Result<Pipeline, Error> {
     gstreamer::init()?;
 
     let pipeline = gstreamer::parse_launch(&format!(
@@ -35,14 +35,14 @@ fn create_pipeline(filename: &str) -> Result<gstreamer::Pipeline, Error> {
             ! filesink location={}",
             filename
     ))?
-    .downcast::<gstreamer::Pipeline>()
+    .downcast::<Pipeline>()
     .expect("Expected a gst::Pipeline");
 
     Ok(pipeline)
 }
 
 fn main_loop(
-    pipeline: gstreamer::Pipeline,
+    pipeline: Pipeline,
     sender: Sender<Command>,
     receiver: Receiver<Command>,
 ) -> Result<glib::MainLoop, Error> {

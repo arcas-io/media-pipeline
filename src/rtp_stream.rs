@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn it_streams_rtp() {
-        let (tx, rx) = start();
+        let (_tx, rx) = start();
         let mut count = 0;
         let max = 10;
 
