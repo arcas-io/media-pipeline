@@ -83,20 +83,14 @@ mod tests {
 
     use super::*;
 
+    // ignore test, this is used for other tests in dev mode
     #[test]
+    #[cfg_attr(not(feature = "test_udp_server"), ignore)]
     fn it_serves_rtp_via_udp() {
-        let (tx, rx) = start();
-        let mut count = 0;
-        let max = 10;
+        let _ = env_logger::try_init();
 
-        while let Ok(_bytes) = rx.recv() {
-            count += 1;
+        let (_tx, rx) = start();
 
-            if count >= max {
-                break;
-            }
-        }
-
-        assert_eq!(count, max);
+        while let Ok(_bytes) = rx.recv() {}
     }
 }

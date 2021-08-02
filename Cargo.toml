@@ -33,3 +33,6 @@ path = "src/audiovideo.rs"
 [[bin]]
 name = "video"
 path = "src/video.rs"
+
+[features]
+test_udp_server = []
