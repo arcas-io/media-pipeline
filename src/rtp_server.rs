@@ -91,7 +91,8 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
                         appsink,
                         gstreamer::ResourceError::Failed,
                         ("Failed sending packets to the channel")
-                    )});
+                    )
+                });
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })
@@ -157,7 +158,7 @@ mod tests {
 
     #[test]
     fn it_starts() {
-        let (tx, rx) = start();
+        let (_tx, rx) = start();
         let mut count = 0;
         let max = 10;
 
