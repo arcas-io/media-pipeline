@@ -1,10 +1,9 @@
 use anyhow::Error;
-use byte_slice_cast::*;
 use bytes::Bytes;
 use derive_more::{Display, Error};
-use gstreamer::element_error;
 use gstreamer::prelude::*;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use gstreamer::Pipeline;
+use std::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug, Display, Error)]
 #[display(fmt = "Missing element {}", _0)]
@@ -19,7 +18,12 @@ struct ErrorMessage {
     source: glib::Error,
 }
 
-fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> {
+pub enum Command {
+    Stop,
+    Stopped,
+}
+
+fn create_pipeline() -> Result<gstreamer::Pipeline, Error> {
     gstreamer::init()?;
     log::info!("create_pipeline 1");
 
@@ -39,7 +43,11 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
     Ok(pipeline)
 }
 
-fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
+fn main_loop(
+    pipeline: gstreamer::Pipeline,
+    sender: Sender<Command>,
+    receiver: Receiver<Command>,
+) -> Result<glib::MainLoop, Error> {
     log::info!("main loop");
     let main_loop = glib::MainLoop::new(None, false);
     pipeline.set_state(gstreamer::State::Playing)?;
@@ -50,18 +58,37 @@ fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
 
     let pipeline_weak = pipeline.downgrade();
 
-    glib::timeout_add_seconds(15, move || {
-        let pipeline = match pipeline_weak.upgrade() {
-            Some(pipeline) => pipeline,
-            None => return glib::Continue(false),
-        };
+    // listen for commands
+    std::thread::spawn(move || {
+        while let Ok(command) = receiver.recv() {
+            match command {
+                Command::Stop => {
+                    let pipeline = pipeline_weak.upgrade().unwrap();
 
-        println!("sending eos");
+                    println!("sending eos");
 
-        pipeline.send_event(gstreamer::event::Eos::new());
+                    pipeline.send_event(gstreamer::event::Eos::new());
 
-        glib::Continue(false)
+                    glib::Continue(false);
+                    sender.send(Command::Stopped).unwrap();
+                }
+                _ => {}
+            }
+        }
     });
+
+    // glib::timeout_add_seconds(1, move || {
+    //     let pipeline = match pipeline_weak.upgrade() {
+    //         Some(pipeline) => pipeline,
+    //         None => return glib::Continue(false),
+    //     };
+
+    //     println!("sending eos");
+
+    //     pipeline.send_event(gstreamer::event::Eos::new());
+
+    //     glib::Continue(false)
+    // });
 
     let main_loop_clone = main_loop.clone();
 
@@ -69,7 +96,7 @@ fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
         use gstreamer::MessageView;
         let main_loop = &main_loop_clone;
 
-        let view = match msg.view() {
+        let _view = match msg.view() {
             MessageView::Eos(..) => {
                 println!("received eos");
                 // An EndOfStream event was sent to the pipeline, so we tell our main loop
@@ -96,52 +123,65 @@ fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
 
     pipeline.set_state(gstreamer::State::Null)?;
 
+    Ok(main_loop)
+}
+
+pub fn stop(pipeline: Pipeline) -> Result<(), Error> {
+    log::info!("stop");
+
+    let pipeline_weak = pipeline.downgrade();
+    let pipeline = pipeline_weak.upgrade().unwrap();
+
+    println!("sending eos");
+
+    pipeline.send_event(gstreamer::event::Eos::new());
+
+    glib::Continue(false);
+
     Ok(())
 }
 
-pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
+pub fn start(sender: Sender<Command>, receiver: Receiver<Command>) -> Result<(), Error> {
     let _ = env_logger::try_init();
     log::info!("start 1");
-    let (send, recv) = channel::<Bytes>();
     log::info!("start 2");
-    let sender_outbound = send.clone();
-    log::info!("start 3");
 
-    std::thread::spawn(|| {
-        match create_pipeline(send).and_then(main_loop) {
-            Ok(r) => r,
-            Err(e) => eprintln!("Error! {}", e),
-        };
-    });
-    log::info!("start 4");
+    create_pipeline()
+        .and_then(|pipeline| main_loop(pipeline, sender, receiver))
+        .unwrap();
 
-    (sender_outbound, recv)
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
+    use std::thread::sleep;
+    use std::time::Duration;
 
     #[test]
     fn it_records_rtp_via_udp() {
         let _ = env_logger::try_init();
         log::info!("it_records_rtp_via_udp 1");
-        let (tx, rx) = start();
-        log::info!("it_records_rtp_via_udp 2");
-        let mut count = 0;
-        let max = 10;
 
-        while let Ok(_bytes) = rx.recv() {
-            log::info!("it_records_rtp_via_udp loop");
-            count += 1;
+        let (tx, rx) = std::sync::mpsc::channel::<Command>();
+        let sender = tx.clone();
 
-            if count >= max {
-                break;
-            }
-        }
-        log::info!("it_records_rtp_via_udp 3");
+        std::thread::spawn(|| {
+            start(sender, rx).unwrap();
+        });
 
-        assert_eq!(count, max);
+        // record for 2 seconds
+        sleep(Duration::from_millis(2000));
+
+        // stop recording
+        tx.send(Command::Stop).unwrap();
+
+        // finish pause for stop to finish
+        // TODO: receive message from the main loop rather than wait
+        sleep(Duration::from_millis(1000));
+
+        // assert_eq!(count, max);
     }
 }
