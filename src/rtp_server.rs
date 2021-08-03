@@ -1,6 +1,6 @@
 use anyhow::Error;
 use byte_slice_cast::*;
-use bytes::Bytes;
+use bytes::BytesMut;
 use derive_more::{Display, Error};
 use gstreamer::element_error;
 use gstreamer::prelude::*;
@@ -19,7 +19,7 @@ struct ErrorMessage {
     source: glib::Error,
 }
 
-fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> {
+fn create_pipeline(sender: Sender<BytesMut>) -> Result<gstreamer::Pipeline, Error> {
     gstreamer::init()?;
 
     let pipeline = gstreamer::parse_launch(&format!(
@@ -86,13 +86,15 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
                 })?;
 
                 // it's not really an error below, just the receiver gets dropped
-                sender.send(Bytes::from(samples.to_owned())).map_err(|_| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed sending packets to the channel")
-                    )
-                });
+                sender
+                    .send(BytesMut::from(samples.to_owned().as_byte_slice()))
+                    .map_err(|_| {
+                        element_error!(
+                            appsink,
+                            gstreamer::ResourceError::Failed,
+                            ("Failed sending packets to the channel")
+                        )
+                    });
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })
@@ -136,9 +138,9 @@ fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
+pub fn start() -> (Sender<BytesMut>, Receiver<BytesMut>) {
     let _ = env_logger::try_init();
-    let (send, recv) = channel::<Bytes>();
+    let (send, recv) = channel::<BytesMut>();
     let sender_outbound = send.clone();
 
     std::thread::spawn(|| {
