@@ -1,23 +1,10 @@
+use crate::main_loop::main_loop_simple;
 use anyhow::Error;
 use byte_slice_cast::*;
 use bytes::Bytes;
-use derive_more::{Display, Error};
 use gstreamer::element_error;
 use gstreamer::prelude::*;
 use std::sync::mpsc::{channel, Receiver, Sender};
-
-#[derive(Debug, Display, Error)]
-#[display(fmt = "Missing element {}", _0)]
-struct MissingElement(#[error(not(source))] &'static str);
-
-#[derive(Debug, Display, Error)]
-#[display(fmt = "Received error from {}: {} (debug: {:?})", src, error, debug)]
-struct ErrorMessage {
-    src: String,
-    error: String,
-    debug: Option<String>,
-    source: glib::Error,
-}
 
 fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> {
     gstreamer::init()?;
@@ -85,13 +72,8 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
                     gstreamer::FlowError::Error
                 })?;
 
-                // it's not really an error below, just the receiver gets dropped
                 if let Err(_) = sender.send(Bytes::from(samples.to_owned())) {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed sending packets to the channel")
-                    )
+                    log::info!("Receiver not able to receive bytes from the rtp stream");
                 };
 
                 Ok(gstreamer::FlowSuccess::Ok)
@@ -102,50 +84,15 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
     Ok(pipeline)
 }
 
-fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
-    pipeline.set_state(gstreamer::State::Playing)?;
-
-    let bus = pipeline
-        .bus()
-        .expect("Pipeline without bus. Shouldn't happen!");
-
-    for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
-        use gstreamer::MessageView;
-
-        match msg.view() {
-            MessageView::Eos(..) => break,
-            MessageView::Error(err) => {
-                pipeline.set_state(gstreamer::State::Null)?;
-                return Err(ErrorMessage {
-                    src: msg
-                        .src()
-                        .map(|s| String::from(s.path_string()))
-                        .unwrap_or_else(|| String::from("None")),
-                    error: err.error().to_string(),
-                    debug: err.debug(),
-                    source: err.error(),
-                }
-                .into());
-            }
-            _ => (),
-        }
-    }
-
-    pipeline.set_state(gstreamer::State::Null)?;
-
-    Ok(())
-}
-
 pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
     let _ = env_logger::try_init();
     let (send, recv) = channel::<Bytes>();
     let sender_outbound = send.clone();
 
     std::thread::spawn(|| {
-        match create_pipeline(send).and_then(main_loop) {
-            Ok(r) => r,
-            Err(e) => eprintln!("Error! {}", e),
-        };
+        create_pipeline(send)
+            .and_then(|pipeline| main_loop_simple(pipeline))
+            .unwrap();
     });
 
     (sender_outbound, recv)

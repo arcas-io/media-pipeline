@@ -31,7 +31,7 @@ let (outbound_sender, outbound_receiver) = channel::<Command>();
 
 // record the video in a separate thread
 std::thread::spawn(move || {
-    record(filename, inbound_receiver, outbound_sender).unwrap();
+    record("5000", filename, inbound_receiver, outbound_sender).unwrap();
 });
 
 // record for 2 seconds
@@ -44,7 +44,7 @@ inbound_sender.send(Command::Stop).unwrap();
 while let Ok(command) = outbound_receiver.recv() {
     match command {
         Command::Stopped => {
-            log::info!("received Command::Stopped");
+            println!("received Command::Stopped");
         }
         _ => {}
     }
