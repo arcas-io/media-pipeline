@@ -20,22 +20,35 @@ while let Ok(bytes) = rx.recv() {
 
 ```rust
 use media_pipeline::rtp_udp_client_record::record;
+use std::path::Path;
 use std::sync::mpsc::channel;
+use std::thread::sleep;
+use std::time::Duration;
 
-let filename = "test/output/it_records_rtp_via_udp.mp4";
-let (tx, rx) = channel::<Command>();
-let sender = tx.clone();
+let filename = "it_records_rtp_via_udp.mp4";
+let (inbound_sender, inbound_receiver) = channel::<Command>();
+let (outbound_sender, outbound_receiver) = channel::<Command>();
 
-// record in a separate thread
+// record the video in a separate thread
 std::thread::spawn(move || {
-    record(filename, sender, rx).unwrap();
+    record(filename, inbound_receiver, outbound_sender).unwrap();
 });
 
 // record for 2 seconds
 sleep(Duration::from_millis(2000));
 
 // stop recording
-tx.send(Command::Stop).unwrap();
+inbound_sender.send(Command::Stop).unwrap();
+
+// listen for commands
+while let Ok(command) = outbound_receiver.recv() {
+    match command {
+        Command::Stopped => {
+            log::info!("received Command::Stopped");
+        }
+        _ => {}
+    }
+}
 ```
 
 ## Running PoC Binaries

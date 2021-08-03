@@ -18,21 +18,22 @@ gstreamer-app = "0.17"
 gstreamer-audio = "0.17" 
 gstreamer-base = "0.17" # TODO: consider removing
 gstreamer-video = "0.17" # TODO: consider removing
+tokio = { version = "1.8.1", features = ["full"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.24"
 
-[[bin]]
-name = "audio"
-path = "src/audio.rs"
+# [[bin]]
+# name = "audio"
+# path = "src/audio.rs"
 
-[[bin]]
-name = "audiovideo"
-path = "src/audiovideo.rs"
+# [[bin]]
+# name = "audiovideo"
+# path = "src/audiovideo.rs"
 
-[[bin]]
-name = "video"
-path = "src/video.rs"
+# [[bin]]
+# name = "video"
+# path = "src/video.rs"
 
 [features]
 test_udp_server = []

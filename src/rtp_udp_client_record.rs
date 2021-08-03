@@ -17,8 +17,14 @@ struct ErrorMessage {
     source: glib::Error,
 }
 
+type ChannelPair = (Sender<Command>, Receiver<Command>);
+
+// Commands sent from and to the main loop
 pub enum Command {
+    // Stop ecording
     Stop,
+
+    // Recording has stopped
     Stopped,
 }
 
@@ -43,8 +49,8 @@ fn create_pipeline(filename: &str) -> Result<Pipeline, Error> {
 
 fn main_loop(
     pipeline: Pipeline,
-    sender: Sender<Command>,
-    receiver: Receiver<Command>,
+    inbound_receiver: Receiver<Command>,
+    outbound_sender: Sender<Command>,
 ) -> Result<glib::MainLoop, Error> {
     let main_loop = glib::MainLoop::new(None, false);
     pipeline.set_state(gstreamer::State::Playing)?;
@@ -57,9 +63,10 @@ fn main_loop(
 
     // listen for commands
     std::thread::spawn(move || {
-        while let Ok(command) = receiver.recv() {
+        while let Ok(command) = inbound_receiver.recv() {
             match command {
                 Command::Stop => {
+                    log::info!("received Command::Stop");
                     let pipeline = pipeline_weak.upgrade().unwrap();
 
                     log::info!("sending eos");
@@ -67,7 +74,7 @@ fn main_loop(
                     pipeline.send_event(gstreamer::event::Eos::new());
 
                     glib::Continue(false);
-                    sender.send(Command::Stopped).unwrap();
+                    outbound_sender.send(Command::Stopped).unwrap();
                 }
                 _ => {}
             }
@@ -112,13 +119,13 @@ fn main_loop(
 
 pub fn record(
     filename: &str,
-    sender: Sender<Command>,
-    receiver: Receiver<Command>,
+    inbound_receiver: Receiver<Command>,
+    outbound_sender: Sender<Command>,
 ) -> Result<(), Error> {
     let _ = env_logger::try_init();
 
     create_pipeline(filename)
-        .and_then(|pipeline| main_loop(pipeline, sender, receiver))
+        .and_then(|pipeline| main_loop(pipeline, inbound_receiver, outbound_sender))
         .unwrap();
 
     Ok(())
@@ -128,7 +135,9 @@ pub fn record(
 mod tests {
 
     use super::*;
+    use crate::rtp_udp_server::start;
     use std::path::Path;
+    use std::sync::mpsc::channel;
     use std::thread::sleep;
     use std::time::Duration;
 
@@ -137,23 +146,35 @@ mod tests {
         let _ = env_logger::try_init();
 
         let filename = "test/output/it_records_rtp_via_udp.mp4";
-        let (tx, rx) = std::sync::mpsc::channel::<Command>();
-        let sender = tx.clone();
+        let (inbound_sender, inbound_receiver) = channel::<Command>();
+        let (outbound_sender, outbound_receiver) = channel::<Command>();
 
+        // start a udp server
         std::thread::spawn(move || {
-            record(filename, sender, rx).unwrap();
+            let (_, _) = start();
+        });
+
+        // record the video in a separate thread
+        std::thread::spawn(move || {
+            record(filename, inbound_receiver, outbound_sender).unwrap();
         });
 
         // record for 2 seconds
         sleep(Duration::from_millis(2000));
 
         // stop recording
-        tx.send(Command::Stop).unwrap();
+        inbound_sender.send(Command::Stop).unwrap();
 
-        // finish pause for stop to finish
-        // TODO: receive message from the main loop rather than wait
-        sleep(Duration::from_millis(1000));
-
-        assert!(Path::new(filename).exists());
+        // listen for commands
+        while let Ok(command) = outbound_receiver.recv() {
+            match command {
+                Command::Stopped => {
+                    log::info!("received Command::Stopped");
+                    assert!(Path::new(filename).exists());
+                    break;
+                }
+                _ => {}
+            }
+        }
     }
 }
