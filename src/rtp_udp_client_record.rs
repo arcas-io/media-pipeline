@@ -17,8 +17,6 @@ struct ErrorMessage {
     source: glib::Error,
 }
 
-type ChannelPair = (Sender<Command>, Receiver<Command>);
-
 // Commands sent from and to the main loop
 pub enum Command {
     // Stop ecording

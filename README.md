@@ -1,6 +1,6 @@
 # Media Pipeline
 
-An abstraction over the rust bindings of GStreamer.
+An abstraction over the [rust bindings](https://github.com/sdroege/gstreamer-rs) of GStreamer.
 
 ## Usage
 
@@ -19,7 +19,7 @@ while let Ok(bytes) = rx.recv() {
 ### Record mp4 from a UDP Port
 
 ```rust
-use media_pipeline::rtp_udp_client_record::record;
+use media_pipeline::rtp_udp_client_record::{record, Command};
 use std::path::Path;
 use std::sync::mpsc::channel;
 use std::thread::sleep;
@@ -51,22 +51,8 @@ while let Ok(command) = outbound_receiver.recv() {
 }
 ```
 
-## Running PoC Binaries
-
-### Audio Only
+### Invoking a Test UDP Server
 
 ```shell
-cargo run --bin audio
-```
-
-### Video Only
-
-```shell
-cargo run --bin video
-```
-
-### Audio and Video
-
-```shell
-cargo run --bin audiovideo
+cargo test it_serves_rtp_via_udp --features "test_udp_server"
 ```
