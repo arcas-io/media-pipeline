@@ -80,7 +80,6 @@ fn pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline> {
 }
 
 pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
-    let _ = env_logger::try_init();
     let (send, recv) = channel::<Bytes>();
     let sender_outbound = send.clone();
 

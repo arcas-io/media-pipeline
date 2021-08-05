@@ -2,6 +2,7 @@ use crate::error::Result;
 use crate::main_loop::{main_loop, Command};
 use crate::{create_pipeline, element};
 use bytes::Bytes;
+use glib::MainLoop;
 use gstreamer::Pipeline;
 use gstreamer_app::AppSrc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -94,15 +95,11 @@ pub fn record(
     receiver: Receiver<Bytes>,
     inbound_receiver: Receiver<Command>,
     outbound_sender: Sender<Command>,
-) -> Result<()> {
-    let _ = env_logger::try_init();
-
+) -> Result<MainLoop> {
     log::info!("Starting to record {}", filename);
 
     pipeline(filename, receiver)
-        .and_then(|pipeline| main_loop(pipeline, inbound_receiver, outbound_sender))?;
-
-    Ok(())
+        .and_then(|pipeline| main_loop(pipeline, inbound_receiver, outbound_sender))
 }
 
 #[cfg(test)]
