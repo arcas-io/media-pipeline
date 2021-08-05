@@ -1,13 +1,13 @@
 use crate::error::Result;
 use crate::main_loop::{main_loop, Command};
 use crate::{create_pipeline, element};
-use bytes::Bytes;
+use bytes::BytesMut;
 use glib::MainLoop;
 use gstreamer::Pipeline;
 use gstreamer_app::AppSrc;
 use std::sync::mpsc::{Receiver, Sender};
 
-fn pipeline(filename: &str, receiver: Receiver<Bytes>) -> Result<Pipeline> {
+fn pipeline(filename: &str, receiver: Receiver<BytesMut>) -> Result<Pipeline> {
     // TODO: handle different formats
     // TODO: research sdpdemux for handling flexible formats
     let launch = format!(
@@ -92,7 +92,7 @@ fn pipeline(filename: &str, receiver: Receiver<Bytes>) -> Result<Pipeline> {
 
 pub fn record(
     filename: &str,
-    receiver: Receiver<Bytes>,
+    receiver: Receiver<BytesMut>,
     inbound_receiver: Receiver<Command>,
     outbound_sender: Sender<Command>,
 ) -> Result<MainLoop> {

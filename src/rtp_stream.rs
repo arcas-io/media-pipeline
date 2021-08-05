@@ -2,12 +2,12 @@ use crate::error::Result;
 use crate::main_loop::main_loop_simple;
 use crate::{create_pipeline, element};
 use byte_slice_cast::*;
-use bytes::Bytes;
+use bytes::BytesMut;
 use gstreamer::element_error;
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-fn pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline> {
+fn pipeline(sender: Sender<BytesMut>) -> Result<gstreamer::Pipeline> {
     let launch = format!(
         "videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! appsink name=sink"
     );
@@ -67,7 +67,7 @@ fn pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline> {
                 })?;
 
                 // not an error, just the receiver is no longer around
-                if let Err(_) = sender.send(Bytes::from(samples.to_owned())) {
+                if let Err(_) = sender.send(BytesMut::from(samples.to_owned().as_byte_slice())) {
                     log::info!("Receiver not able to receive bytes from the rtp stream");
                 };
 
@@ -79,8 +79,8 @@ fn pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline> {
     Ok(pipeline)
 }
 
-pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
-    let (send, recv) = channel::<Bytes>();
+pub fn start() -> (Sender<BytesMut>, Receiver<BytesMut>) {
+    let (send, recv) = channel::<BytesMut>();
     let sender_outbound = send.clone();
 
     std::thread::spawn(|| {
