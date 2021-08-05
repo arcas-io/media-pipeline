@@ -16,10 +16,50 @@ while let Ok(bytes) = rx.recv() {
 }
 ```
 
-### Record mp4 from a UDP Port
+### Record MP4 from RTP packets in a Stream
 
 ```rust
-use media_pipeline::rtp_udp_client_record::{record, Command};
+use media_pipeline::{main_loop::Command, rtp_stream_record::record};
+use std::path::Path;
+use std::sync::mpsc::channel;
+use std::thread::sleep;
+use std::time::Duration;
+
+let filename = "test/output/it_records_rtp_via_stream.mp4";
+let (inbound_sender, inbound_receiver) = channel::<Command>();
+let (outbound_sender, outbound_receiver) = channel::<Command>();
+
+// start the rtp stream
+let (_tx, rx) = start();
+
+// record the video in a separate thread
+std::thread::spawn(move || {
+    record(filename, rx, inbound_receiver, outbound_sender)
+        .map_err(|error| log::error!("Error recording: {:?}", error));
+});
+
+// record for 4 seconds
+sleep(Duration::from_millis(4000));
+
+// stop recording
+inbound_sender.send(Command::Stop)
+    .map_err(|error| log::error!("Error sending Command:Stop to the main loop: {:?}", error));
+
+// listen for commands
+while let Ok(command) = outbound_receiver.recv() {
+    match command {
+        Command::Stopped => {
+            println!("received Command::Stopped");
+        }
+        _ => {}
+    }
+}
+```
+
+### Record MP4 from RTP packets on a UDP Port
+
+```rust
+use media_pipeline::{main_loop::Command, rtp_udp_client_record::record};
 use std::path::Path;
 use std::sync::mpsc::channel;
 use std::thread::sleep;
@@ -29,16 +69,20 @@ let filename = "it_records_rtp_via_udp.mp4";
 let (inbound_sender, inbound_receiver) = channel::<Command>();
 let (outbound_sender, outbound_receiver) = channel::<Command>();
 
+// at this point, a source should be sending RTP packets to a UDP port
+
 // record the video in a separate thread
 std::thread::spawn(move || {
-    record("5000", filename, inbound_receiver, outbound_sender).unwrap();
+    record("5000", filename, inbound_receiver, outbound_sender)
+        .map_err(|error| log::error!("Error recording: {:?}", error));
 });
 
 // record for 2 seconds
 sleep(Duration::from_millis(2000));
 
 // stop recording
-inbound_sender.send(Command::Stop).unwrap();
+inbound_sender.send(Command::Stop)
+    .map_err(|error| log::error!("Error sending Command:Stop to the main loop: {:?}", error));
 
 // listen for commands
 while let Ok(command) = outbound_receiver.recv() {
