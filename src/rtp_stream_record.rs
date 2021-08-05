@@ -29,33 +29,24 @@ fn create_pipeline(
         .downcast::<gstreamer_app::AppSrc>()
         .expect("src element is expected to be an appsrc");
 
-    // let caps = gstreamer::Caps::new_simple(
-    //     "video/x-raw",
-    //     &[
-    //         ("format", &"I420"),
-    //         ("width", &1280),
-    //         ("height", &720),
-    //         ("framerate", &gstreamer::Fraction::new(30, 1)),
-    //         ("pixel-aspect-ratio", &gstreamer::Fraction::new(1, 1)),
-    //         ("interlace-mode", &"progressive"),
-    //         ("chroma-site", &"mpeg2"),
-    //         ("colorimetry", &"bt709"),
-    //     ],
-    // );
-
-    // let caps = gstreamer::Caps::new_simple(
-    //     "video/x-h264",
-    //     &[
-    //         ("format", &"avc"),
-    //         ("width", &1280),
-    //         ("height", &720),
-    //         ("framerate", &gstreamer::Fraction::new(30, 1)),
-    //         ("pixel-aspect-ratio", &gstreamer::Fraction::new(1, 1)),
-    //         ("interlace-mode", &"progressive"),
-    //         ("chroma-site", &"mpeg2"),
-    //         ("colorimetry", &"bt709"),
-    //     ],
-    // );
+    // I got these caps by running the stream creation on the command line and
+    // used the last caps output.
+    //
+    // run this:
+    //
+    // gst-launch-1.0 -v videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! autovideosink
+    //
+    // then this is output:
+    //
+    // Got context from element 'autovideosink0': gst.gl.GLDisplay=context, gst.gl.GLDisplay=(GstGLDisplay)"\(GstGLDisplayCocoa\)\ gldisplaycocoa0";
+    // /GstPipeline:pipeline0/GstVideoTestSrc:videotestsrc0.GstPad:src: caps = video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, framerate=(fraction)30/1, multiview-mode=(string)mono, pixel-aspect-ratio=(fraction)1/1, interlace-mode=(string)progressive
+    // /GstPipeline:pipeline0/GstCapsFilter:capsfilter0.GstPad:src: caps =
+    // Redistribute latency...
+    // /GstPipeline:pipeline0/GstX264Enc:x264enc0.GstPad:sink: caps = video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, framerate=(fraction)30/1, multiview-mode=(string)mono, pixel-aspect-ratio=(fraction)1/1, interlace-mode=(string)progressive
+    // /GstPipeline:pipeline0/GstCapsFilter:capsfilter0.GstPad:sink: caps = video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, framerate=(fraction)30/1, multiview-mode=(string)mono, pixel-aspect-ratio=(fraction)1/1, interlace-mode=(string)progressive
+    // /GstPipeline:pipeline0/GstX264Enc:x264enc0.GstPad:src: caps = video/x-h264, codec_data=(buffer)0142c01fffe1001b6742c01fd9005005bb016a02020280000003008000001e478c192401000468cb8cb2, stream-format=(string)avc, alignment=(string)au, level=(string)3.1, profile=(string)constrained-baseline, width=(int)1280, height=(int)720, pixel-aspect-ratio=(fraction)1/1, framerate=(fraction)30/1, interlace-mode=(string)progressive, colorimetry=(string)bt709, chroma-site=(string)mpeg2, multiview-mode=(string)mono, multiview-flags=(GstVideoMultiviewFlagsSet)0:ffffffff:/right-view-first/left-flipped/left-flopped/right-flipped/right-flopped/half-aspect/mixed-mono
+    //
+    // TODO: figure out a way to get caps from sdp
 
     let caps = gstreamer::Caps::new_simple(
         "application/x-rtp",
