@@ -1,13 +1,11 @@
+use crate::create_pipeline;
+use crate::error::Result;
 use crate::main_loop::{main_loop, Command};
-use anyhow::Error;
-use gstreamer::prelude::*;
 use gstreamer::Pipeline;
 use std::sync::mpsc::{Receiver, Sender};
 
-fn create_pipeline(port: &str, filename: &str) -> Result<Pipeline, Error> {
-    gstreamer::init()?;
-
-    let pipeline = gstreamer::parse_launch(&format!(
+fn pipeline(port: &str, filename: &str) -> Result<Pipeline> {
+    let launch = format!(
         "udpsrc port={}  \
             ! application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264, payload=(int)96
             ! queue  \
@@ -17,9 +15,9 @@ fn create_pipeline(port: &str, filename: &str) -> Result<Pipeline, Error> {
             ! filesink location={}",
             port,
             filename
-    ))?
-    .downcast::<Pipeline>()
-    .expect("Expected a gst::Pipeline");
+    );
+
+    let pipeline = create_pipeline(&launch)?;
 
     Ok(pipeline)
 }
@@ -29,12 +27,11 @@ pub fn record(
     filename: &str,
     inbound_receiver: Receiver<Command>,
     outbound_sender: Sender<Command>,
-) -> Result<(), Error> {
+) -> Result<()> {
     let _ = env_logger::try_init();
 
-    create_pipeline(port, filename)
-        .and_then(|pipeline| main_loop(pipeline, inbound_receiver, outbound_sender))
-        .unwrap();
+    pipeline(port, filename)
+        .and_then(|pipeline| main_loop(pipeline, inbound_receiver, outbound_sender))?;
 
     Ok(())
 }
@@ -51,7 +48,7 @@ mod tests {
 
     #[test]
     fn it_records_rtp_via_udp() {
-        let _ = env_logger::try_init();
+        env_logger::try_init().ok();
 
         let filename = "test/output/it_records_rtp_via_udp.mp4";
         let (inbound_sender, inbound_receiver) = channel::<Command>();

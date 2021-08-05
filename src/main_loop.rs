@@ -1,9 +1,10 @@
-use anyhow::Error;
+use crate::error::Result;
 use gstreamer::prelude::*;
 use gstreamer::Pipeline;
 use std::sync::mpsc::{Receiver, Sender};
 
 // Commands sent from and to the main loop
+// TODO: add strum for auto string conversions
 pub enum Command {
     // Stop ecording
     Stop,
@@ -12,34 +13,46 @@ pub enum Command {
     Stopped,
 }
 
+// Creates a new main_loop that is able to send and receive Commands
 pub(crate) fn main_loop(
     pipeline: Pipeline,
     inbound_receiver: Receiver<Command>,
     outbound_sender: Sender<Command>,
-) -> Result<glib::MainLoop, Error> {
+) -> Result<glib::MainLoop> {
     let main_loop = glib::MainLoop::new(None, false);
     pipeline.set_state(gstreamer::State::Playing)?;
 
+    // failing to create a bus is a catastrophic failure, panic
     let bus = pipeline
         .bus()
         .expect("Pipeline without bus. Shouldn't happen!");
 
     let pipeline_weak = pipeline.downgrade();
+    let log_command = |command: &str| log::info!("received {} in main loop", command);
 
     // listen for commands
     std::thread::spawn(move || {
         while let Ok(command) = inbound_receiver.recv() {
             match command {
                 Command::Stop => {
-                    log::info!("received Command::Stop");
-                    let pipeline = pipeline_weak.upgrade().unwrap();
+                    log_command("Command::Stop");
 
-                    log::info!("sending eos");
+                    if let Some(pipeline) = pipeline_weak.upgrade() {
+                        log::info!("sending EOS");
 
-                    pipeline.send_event(gstreamer::event::Eos::new());
+                        pipeline.send_event(gstreamer::event::Eos::new());
 
-                    glib::Continue(false);
-                    outbound_sender.send(Command::Stopped).unwrap();
+                        glib::Continue(false);
+
+                        if let Err(error) = outbound_sender.send(Command::Stopped) {
+                            log::error!(
+                                "Error sending Command:Stopped from the main loop: {:?}",
+                                error
+                            )
+                        }
+                    } else {
+                        log::error!("Could not upgrade pipeline_weak in main loop");
+                    }
                 }
                 _ => {}
             }
@@ -48,13 +61,14 @@ pub(crate) fn main_loop(
 
     let main_loop_clone = main_loop.clone();
 
+    // failing to add_watch to bus is a catastrophic failure, panic
     bus.add_watch(move |_, msg| {
         use gstreamer::MessageView;
         let main_loop = &main_loop_clone;
 
         let _view = match msg.view() {
             MessageView::Eos(..) => {
-                log::info!("received eos");
+                log::info!("received EOS");
                 // An EndOfStream event was sent to the pipeline, so we tell our main loop
                 // to stop execution here.
                 main_loop.quit()
@@ -82,7 +96,8 @@ pub(crate) fn main_loop(
     Ok(main_loop)
 }
 
-pub(crate) fn main_loop_simple(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
+// Creates a new, basic main_loop that is used for trivial implementations
+pub(crate) fn main_loop_simple(pipeline: gstreamer::Pipeline) -> Result<()> {
     pipeline.set_state(gstreamer::State::Playing)?;
 
     let bus = pipeline

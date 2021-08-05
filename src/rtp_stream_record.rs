@@ -1,16 +1,15 @@
+use crate::error::Result;
 use crate::main_loop::{main_loop, Command};
-use anyhow::Error;
+use crate::{create_pipeline, element};
 use bytes::Bytes;
-use gstreamer::prelude::*;
+use gstreamer::Pipeline;
+use gstreamer_app::AppSrc;
 use std::sync::mpsc::{Receiver, Sender};
 
-fn create_pipeline(
-    filename: &str,
-    receiver: Receiver<Bytes>,
-) -> Result<gstreamer::Pipeline, Error> {
-    gstreamer::init()?;
-
-    let pipeline = gstreamer::parse_launch(&format!(
+fn pipeline(filename: &str, receiver: Receiver<Bytes>) -> Result<Pipeline> {
+    // TODO: handle different formats
+    // TODO: research sdpdemux for handling flexible formats
+    let launch = format!(
         "appsrc name=src  \
         ! application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264, payload=(int)96
         ! queue \
@@ -19,15 +18,10 @@ fn create_pipeline(
             ! mp4mux \
             ! filesink location={}",
         filename
-    ))?
-    .downcast::<gstreamer::Pipeline>()
-    .expect("Expected a gstreamer::Pipeline");
+    );
 
-    let appsrc = pipeline
-        .by_name("src")
-        .expect("src element not found")
-        .downcast::<gstreamer_app::AppSrc>()
-        .expect("src element is expected to be an appsrc");
+    let pipeline = create_pipeline(&launch)?;
+    let appsrc = element::<AppSrc>(&pipeline, "src")?;
 
     // I got these caps by running the stream creation on the command line and
     // used the last caps output.
@@ -68,18 +62,22 @@ fn create_pipeline(
     std::thread::spawn(move || {
         let mut count = 1;
         while let Ok(bytes) = receiver.recv() {
-            log::info!("received bytes: {:?}", bytes);
+            log::trace!("received bytes: {:?}", bytes);
 
             let mut buffer = gstreamer::Buffer::from_slice(bytes);
             // For each frame we produce, we set the timestamp when it should be displayed
             // (pts = presentation time stamp)
             // The autovideosink will use this information to display the frame at the right time.
-            // TODO: figure out a way to make the below more accurate
+            // TODO: figure out a way to make the below more accurate (2500 makes a single use cas work)
             let pts = count * 2500 * gstreamer::ClockTime::USECOND;
-            buffer.get_mut().unwrap().set_pts(pts);
 
+            if let Some(mut_buffer) = buffer.get_mut() {
+                mut_buffer.set_pts(pts);
+            }
+
+            // not an error, just the buffer is flushing
             if let Err(error) = appsrc.push_buffer(buffer) {
-                log::error!("{:?}", error);
+                log::info!("Could not push to buffer: {:?}", error);
                 let _ = appsrc.end_of_stream();
                 break;
             }
@@ -96,14 +94,13 @@ pub fn record(
     receiver: Receiver<Bytes>,
     inbound_receiver: Receiver<Command>,
     outbound_sender: Sender<Command>,
-) -> Result<(), Error> {
+) -> Result<()> {
     let _ = env_logger::try_init();
 
     log::info!("Starting to record {}", filename);
 
-    create_pipeline(filename, receiver)
-        .and_then(|pipeline| main_loop(pipeline, inbound_receiver, outbound_sender))
-        .unwrap();
+    pipeline(filename, receiver)
+        .and_then(|pipeline| main_loop(pipeline, inbound_receiver, outbound_sender))?;
 
     Ok(())
 }
@@ -120,7 +117,7 @@ mod tests {
 
     #[test]
     fn it_records_rtp_via_stream() {
-        env_logger::try_init().unwrap();
+        env_logger::try_init().ok();
 
         let filename = "test/output/it_records_rtp_via_stream.mp4";
         let (inbound_sender, inbound_receiver) = channel::<Command>();
@@ -135,7 +132,7 @@ mod tests {
         });
 
         // record for 4 seconds
-        sleep(Duration::from_millis(4000));
+        sleep(Duration::from_millis(2000));
 
         // stop recording
         inbound_sender.send(Command::Stop).unwrap();

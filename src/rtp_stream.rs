@@ -1,30 +1,24 @@
+use crate::error::Result;
 use crate::main_loop::main_loop_simple;
-use anyhow::Error;
+use crate::{create_pipeline, element};
 use byte_slice_cast::*;
 use bytes::Bytes;
 use gstreamer::element_error;
-use gstreamer::prelude::*;
+use gstreamer_app::{AppSink, AppSinkCallbacks};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> {
-    gstreamer::init()?;
-
-    let pipeline = gstreamer::parse_launch(&format!(
+fn pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline> {
+    let launch = format!(
         "videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! appsink name=sink"
-    ))?
-    .downcast::<gstreamer::Pipeline>()
-    .expect("Expected a gst::Pipeline");
+    );
 
-    let appsink = pipeline
-        .by_name("sink")
-        .expect("sink element not found")
-        .downcast::<gstreamer_app::AppSink>()
-        .expect("sink element is expected to be an appsink");
+    let pipeline = create_pipeline(&launch)?;
+    let appsink = element::<AppSink>(&pipeline, "sink")?;
 
     // Getting data out of the appsink is done by setting callbacks on it.
     // The appsink will then call those handlers, as soon as data is available.
     appsink.set_callbacks(
-        gstreamer_app::AppSinkCallbacks::builder()
+        AppSinkCallbacks::builder()
             // Add a handler to the "new-sample" signal.
             .new_sample(move |appsink| {
                 // Pull the sample in question out of the appsink's buffer.
@@ -72,6 +66,7 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
                     gstreamer::FlowError::Error
                 })?;
 
+                // not an error, just the receiver is no longer around
                 if let Err(_) = sender.send(Bytes::from(samples.to_owned())) {
                     log::info!("Receiver not able to receive bytes from the rtp stream");
                 };
@@ -90,9 +85,10 @@ pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
     let sender_outbound = send.clone();
 
     std::thread::spawn(|| {
-        create_pipeline(send)
-            .and_then(|pipeline| main_loop_simple(pipeline))
-            .unwrap();
+        match pipeline(send).and_then(main_loop_simple) {
+            Ok(r) => r,
+            Err(e) => log::error!("Error! {}", e),
+        };
     });
 
     (sender_outbound, recv)
