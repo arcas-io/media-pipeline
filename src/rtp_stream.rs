@@ -17,9 +17,9 @@ fn create_pipeline(sender: Sender<Bytes>) -> Result<gstreamer::Pipeline, Error> 
 
     let appsink = pipeline
         .by_name("sink")
-        .expect("Sink element not found")
+        .expect("sink element not found")
         .downcast::<gstreamer_app::AppSink>()
-        .expect("Sink element is expected to be an appsink!");
+        .expect("sink element is expected to be an appsink");
 
     // Getting data out of the appsink is done by setting callbacks on it.
     // The appsink will then call those handlers, as soon as data is available.
