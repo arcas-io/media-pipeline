@@ -1,43 +1,24 @@
-use anyhow::Error;
+use crate::error::Result;
+use crate::main_loop::main_loop_simple;
+use crate::{create_pipeline, element};
 use byte_slice_cast::*;
 use bytes::BytesMut;
-use derive_more::{Display, Error};
 use gstreamer::element_error;
-use gstreamer::prelude::*;
+use gstreamer_app::{AppSink, AppSinkCallbacks};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-#[derive(Debug, Display, Error)]
-#[display(fmt = "Missing element {}", _0)]
-struct MissingElement(#[error(not(source))] &'static str);
+fn pipeline(sender: Sender<BytesMut>) -> Result<gstreamer::Pipeline> {
+    let launch = format!(
+        "videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! appsink name=sink"
+    );
 
-#[derive(Debug, Display, Error)]
-#[display(fmt = "Received error from {}: {} (debug: {:?})", src, error, debug)]
-struct ErrorMessage {
-    src: String,
-    error: String,
-    debug: Option<String>,
-    source: glib::Error,
-}
-
-fn create_pipeline(sender: Sender<BytesMut>) -> Result<gstreamer::Pipeline, Error> {
-    gstreamer::init()?;
-
-    let pipeline = gstreamer::parse_launch(&format!(
-        "videotestsrc ! x264enc tune=zerolatency ! rtph264pay ! appsink name=sink"
-    ))?
-    .downcast::<gstreamer::Pipeline>()
-    .expect("Expected a gst::Pipeline");
-
-    let appsink = pipeline
-        .by_name("sink")
-        .expect("Sink element not found")
-        .downcast::<gstreamer_app::AppSink>()
-        .expect("Sink element is expected to be an appsink!");
+    let pipeline = create_pipeline(&launch)?;
+    let appsink = element::<AppSink>(&pipeline, "sink")?;
 
     // Getting data out of the appsink is done by setting callbacks on it.
     // The appsink will then call those handlers, as soon as data is available.
     appsink.set_callbacks(
-        gstreamer_app::AppSinkCallbacks::builder()
+        AppSinkCallbacks::builder()
             // Add a handler to the "new-sample" signal.
             .new_sample(move |appsink| {
                 // Pull the sample in question out of the appsink's buffer.
@@ -85,16 +66,10 @@ fn create_pipeline(sender: Sender<BytesMut>) -> Result<gstreamer::Pipeline, Erro
                     gstreamer::FlowError::Error
                 })?;
 
-                // it's not really an error below, just the receiver gets dropped
-                sender
-                    .send(BytesMut::from(samples.to_owned().as_byte_slice()))
-                    .map_err(|_| {
-                        element_error!(
-                            appsink,
-                            gstreamer::ResourceError::Failed,
-                            ("Failed sending packets to the channel")
-                        )
-                    });
+                // not an error, just the receiver is no longer around
+                if let Err(_) = sender.send(BytesMut::from(samples.to_owned().as_byte_slice())) {
+                    log::info!("Receiver not able to receive bytes from the rtp stream");
+                };
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })
@@ -104,49 +79,14 @@ fn create_pipeline(sender: Sender<BytesMut>) -> Result<gstreamer::Pipeline, Erro
     Ok(pipeline)
 }
 
-fn main_loop(pipeline: gstreamer::Pipeline) -> Result<(), Error> {
-    pipeline.set_state(gstreamer::State::Playing)?;
-
-    let bus = pipeline
-        .bus()
-        .expect("Pipeline without bus. Shouldn't happen!");
-
-    for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
-        use gstreamer::MessageView;
-
-        match msg.view() {
-            MessageView::Eos(..) => break,
-            MessageView::Error(err) => {
-                pipeline.set_state(gstreamer::State::Null)?;
-                return Err(ErrorMessage {
-                    src: msg
-                        .src()
-                        .map(|s| String::from(s.path_string()))
-                        .unwrap_or_else(|| String::from("None")),
-                    error: err.error().to_string(),
-                    debug: err.debug(),
-                    source: err.error(),
-                }
-                .into());
-            }
-            _ => (),
-        }
-    }
-
-    pipeline.set_state(gstreamer::State::Null)?;
-
-    Ok(())
-}
-
 pub fn start() -> (Sender<BytesMut>, Receiver<BytesMut>) {
-    let _ = env_logger::try_init();
     let (send, recv) = channel::<BytesMut>();
     let sender_outbound = send.clone();
 
     std::thread::spawn(|| {
-        match create_pipeline(send).and_then(main_loop) {
+        match pipeline(send).and_then(main_loop_simple) {
             Ok(r) => r,
-            Err(e) => eprintln!("Error! {}", e),
+            Err(e) => log::error!("Error! {}", e),
         };
     });
 
@@ -159,7 +99,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_starts() {
+    fn it_streams_rtp() {
         let (_tx, rx) = start();
         let mut count = 0;
         let max = 10;
