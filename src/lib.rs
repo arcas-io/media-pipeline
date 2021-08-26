@@ -7,10 +7,13 @@ pub mod rtp_udp_server;
 
 use std::sync::mpsc::{Receiver, Sender};
 
-use crate::{error::{MediaPipelineError, Result}, main_loop::main_loop_simple};
+use crate::{
+    error::{MediaPipelineError, Result},
+    main_loop::main_loop_simple,
+};
 use byte_slice_cast::{AsByteSlice, AsSliceOf};
 use bytes::BytesMut;
-use gstreamer::{Element, Pipeline, element_error, parse_launch, prelude::*};
+use gstreamer::{element_error, parse_launch, prelude::*, Element, Pipeline};
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use log::debug;
 
@@ -111,11 +114,9 @@ fn appsink_pipeline(launch: &str, sender: Sender<BytesMut>) -> Result<gstreamer:
 pub fn create_and_start_appsink_pipeline(launch: &str) -> Result<Receiver<BytesMut>> {
     let (tx, rx) = std::sync::mpsc::channel::<BytesMut>();
     let pipline = appsink_pipeline(launch, tx);
-    std::thread::spawn(move || {
-        match pipline.and_then(main_loop_simple) {
-            Ok(_) => {},
-            Err(err) => log::error!("pipeline error: {}", err),
-        }
+    std::thread::spawn(move || match pipline.and_then(main_loop_simple) {
+        Ok(_) => {}
+        Err(err) => log::error!("pipeline error: {}", err),
     });
     Ok(rx)
 }
