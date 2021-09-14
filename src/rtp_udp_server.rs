@@ -4,7 +4,7 @@ use crate::main_loop::main_loop_simple;
 use bytes::Bytes;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-fn pipeline(_sender: Sender<Bytes>) -> Result<gstreamer::Pipeline> {
+fn pipeline() -> Result<gstreamer::Pipeline> {
     let launch = format!(
         "videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! udpsink port=5000 host=127.0.0.1"
     );
@@ -19,7 +19,7 @@ pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
     let sender_outbound = send.clone();
 
     std::thread::spawn(|| {
-        match pipeline(send).and_then(main_loop_simple) {
+        match pipeline().and_then(main_loop_simple) {
             Ok(r) => r,
             Err(e) => log::error!("Error! {}", e),
         };
