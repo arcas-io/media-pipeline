@@ -42,8 +42,6 @@ pub(crate) fn main_loop(
 
                         pipeline.send_event(gstreamer::event::Eos::new());
 
-                        glib::Continue(false);
-
                         if let Err(error) = outbound_sender.send(Command::Stopped) {
                             log::error!(
                                 "Error sending Command:Stopped from the main loop: {:?}",
@@ -54,7 +52,7 @@ pub(crate) fn main_loop(
                         log::error!("Could not upgrade pipeline_weak in main loop");
                     }
                 }
-                _ => {}
+                _ => log::error!("Unhandled command"),
             }
         }
     });
