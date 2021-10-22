@@ -8,11 +8,8 @@ use gstreamer_app::{AppSink, AppSinkCallbacks};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 fn pipeline(sender: Sender<BytesMut>) -> Result<gstreamer::Pipeline> {
-    let launch = format!(
-        "videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! appsink name=sink"
-    );
-
-    let pipeline = create_pipeline(&launch)?;
+    let launch = "videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! appsink name=sink";
+    let pipeline = create_pipeline(launch)?;
     let appsink = element::<AppSink>(&pipeline, "sink")?;
 
     // Getting data out of the appsink is done by setting callbacks on it.
@@ -67,7 +64,10 @@ fn pipeline(sender: Sender<BytesMut>) -> Result<gstreamer::Pipeline> {
                 })?;
 
                 // not an error, just the receiver is no longer around
-                if let Err(_) = sender.send(BytesMut::from(samples.to_owned().as_byte_slice())) {
+                if sender
+                    .send(BytesMut::from(samples.to_owned().as_byte_slice()))
+                    .is_err()
+                {
                     log::info!("Receiver not able to receive bytes from the rtp stream");
                 };
 

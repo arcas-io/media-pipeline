@@ -98,7 +98,10 @@ fn appsink_pipeline(launch: &str, sender: Sender<BytesMut>) -> Result<gstreamer:
                 })?;
 
                 // not an error, just the receiver is no longer around
-                if let Err(_) = sender.send(BytesMut::from(samples.to_owned().as_byte_slice())) {
+                if sender
+                    .send(BytesMut::from(samples.to_owned().as_byte_slice()))
+                    .is_err()
+                {
                     log::info!("Receiver not able to receive bytes from the rtp stream");
                 };
 

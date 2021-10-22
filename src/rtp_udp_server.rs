@@ -5,18 +5,14 @@ use bytes::Bytes;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 fn pipeline() -> Result<gstreamer::Pipeline> {
-    let launch = format!(
-        "videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! udpsink port=5000 host=127.0.0.1"
-    );
-
-    let pipeline = create_pipeline(&launch)?;
+    let launch = "videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! udpsink port=5000 host=127.0.0.1";
+    let pipeline = create_pipeline(launch)?;
 
     Ok(pipeline)
 }
 
 pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
     let (send, recv) = channel::<Bytes>();
-    let sender_outbound = send.clone();
 
     std::thread::spawn(|| {
         match pipeline().and_then(main_loop_simple) {
@@ -25,7 +21,7 @@ pub fn start() -> (Sender<Bytes>, Receiver<Bytes>) {
         };
     });
 
-    (sender_outbound, recv)
+    (send, recv)
 }
 
 #[cfg(test)]
