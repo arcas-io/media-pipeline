@@ -15,6 +15,7 @@ glib = "0.14"
 gstreamer-app = "0.17" 
 gstreamer-base = "0.17"
 thiserror = "1.0"
+crossbeam-channel = "0.5.1"
 
 [features]
 test_udp_server = []
