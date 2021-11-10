@@ -1,9 +1,9 @@
 use crate::create_pipeline;
 use crate::error::Result;
 use crate::main_loop::{main_loop, Command};
+use crossbeam_channel::{Receiver, Sender};
 use glib::MainLoop;
 use gstreamer::Pipeline;
-use std::sync::mpsc::{Receiver, Sender};
 
 fn pipeline(port: &str, filename: &str) -> Result<Pipeline> {
     let launch = format!(
@@ -38,10 +38,11 @@ pub fn record(
 #[cfg(test)]
 mod tests {
 
+    use crossbeam_channel::unbounded;
+
     use super::*;
     use crate::rtp_udp_server::start;
     use std::path::Path;
-    use std::sync::mpsc::channel;
     use std::thread::sleep;
     use std::time::Duration;
 
@@ -50,8 +51,8 @@ mod tests {
         env_logger::try_init().ok();
 
         let filename = "test/output/it_records_rtp_via_udp.mp4";
-        let (inbound_sender, inbound_receiver) = channel::<Command>();
-        let (outbound_sender, outbound_receiver) = channel::<Command>();
+        let (inbound_sender, inbound_receiver) = unbounded::<Command>();
+        let (outbound_sender, outbound_receiver) = unbounded::<Command>();
 
         // start a udp server
         std::thread::spawn(move || {
@@ -71,13 +72,10 @@ mod tests {
 
         // listen for commands
         while let Ok(command) = outbound_receiver.recv() {
-            match command {
-                Command::Stopped => {
-                    log::info!("received Command::Stopped");
-                    assert!(Path::new(filename).exists());
-                    break;
-                }
-                _ => {}
+            if let Command::Stopped = command {
+                log::info!("received Command::Stopped");
+                assert!(Path::new(filename).exists());
+                break;
             }
         }
     }

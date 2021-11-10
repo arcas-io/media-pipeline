@@ -3,9 +3,9 @@ use crate::main_loop::main_loop_simple;
 use crate::{create_pipeline, element};
 use byte_slice_cast::*;
 use bytes::BytesMut;
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use gstreamer::element_error;
 use gstreamer_app::{AppSink, AppSinkCallbacks};
-use std::sync::mpsc::{channel, Receiver, Sender};
 
 fn pipeline(sender: Sender<BytesMut>) -> Result<gstreamer::Pipeline> {
     let launch = "videotestsrc ! video/x-raw,format=I420,framerate=30/1,width=1280,height=720 ! x264enc tune=zerolatency ! rtph264pay ! appsink name=sink";
@@ -80,7 +80,7 @@ fn pipeline(sender: Sender<BytesMut>) -> Result<gstreamer::Pipeline> {
 }
 
 pub fn start() -> (Sender<BytesMut>, Receiver<BytesMut>) {
-    let (send, recv) = channel::<BytesMut>();
+    let (send, recv) = unbounded::<BytesMut>();
     let sender_outbound = send.clone();
 
     std::thread::spawn(|| {

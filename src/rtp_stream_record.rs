@@ -2,10 +2,10 @@ use crate::error::Result;
 use crate::main_loop::{main_loop, Command};
 use crate::{create_pipeline, element};
 use bytes::BytesMut;
+use crossbeam_channel::{Receiver, Sender};
 use glib::MainLoop;
 use gstreamer::Pipeline;
 use gstreamer_app::AppSrc;
-use std::sync::mpsc::{Receiver, Sender};
 
 fn pipeline(filename: &str, receiver: Receiver<BytesMut>) -> Result<Pipeline> {
     // TODO: handle different formats
@@ -105,10 +105,11 @@ pub fn record(
 #[cfg(test)]
 mod tests {
 
+    use crossbeam_channel::unbounded;
+
     use super::*;
     use crate::rtp_stream::start;
     use std::path::Path;
-    use std::sync::mpsc::channel;
     use std::thread::sleep;
     use std::time::Duration;
 
@@ -117,8 +118,8 @@ mod tests {
         env_logger::try_init().ok();
 
         let filename = "test/output/it_records_rtp_via_stream.mp4";
-        let (inbound_sender, inbound_receiver) = channel::<Command>();
-        let (outbound_sender, outbound_receiver) = channel::<Command>();
+        let (inbound_sender, inbound_receiver) = unbounded::<Command>();
+        let (outbound_sender, outbound_receiver) = unbounded::<Command>();
 
         // start the rtp stream
         let (_tx, rx) = start();
@@ -136,14 +137,11 @@ mod tests {
 
         // listen for commands
         while let Ok(command) = outbound_receiver.recv() {
-            match command {
-                Command::Stopped => {
-                    log::info!("received Command::Stopped");
-                    // not a great assertion, but means we got to the end and the file exists
-                    assert!(Path::new(filename).exists());
-                    break;
-                }
-                _ => {}
+            if let Command::Stopped = command {
+                log::info!("received Command::Stopped");
+                // not a great assertion, but means we got to the end and the file exists
+                assert!(Path::new(filename).exists());
+                break;
             }
         }
     }

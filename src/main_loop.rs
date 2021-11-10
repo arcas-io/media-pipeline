@@ -1,7 +1,7 @@
 use crate::error::Result;
+use crossbeam_channel::{Receiver, Sender};
 use gstreamer::prelude::*;
 use gstreamer::Pipeline;
-use std::sync::mpsc::{Receiver, Sender};
 
 // Commands sent from and to the main loop
 // TODO: add strum for auto string conversions

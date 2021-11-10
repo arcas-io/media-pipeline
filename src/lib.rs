@@ -5,7 +5,7 @@ pub mod rtp_stream_record;
 pub mod rtp_udp_client_record;
 pub mod rtp_udp_server;
 
-use std::sync::mpsc::{Receiver, Sender};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 
 use crate::{
     error::{MediaPipelineError, Result},
@@ -115,7 +115,17 @@ fn appsink_pipeline(launch: &str, sender: Sender<BytesMut>) -> Result<gstreamer:
 }
 
 pub fn create_and_start_appsink_pipeline(launch: &str) -> Result<Receiver<BytesMut>> {
-    let (tx, rx) = std::sync::mpsc::channel::<BytesMut>();
+    let (tx, rx) = unbounded::<BytesMut>();
+    let pipline = appsink_pipeline(launch, tx);
+    std::thread::spawn(move || match pipline.and_then(main_loop_simple) {
+        Ok(_) => {}
+        Err(err) => log::error!("pipeline error: {}", err),
+    });
+    Ok(rx)
+}
+
+pub fn create_and_start_appsink_pipeline_crossbeam(launch: &str) -> Result<Receiver<BytesMut>> {
+    let (tx, rx) = unbounded::<BytesMut>();
     let pipline = appsink_pipeline(launch, tx);
     std::thread::spawn(move || match pipline.and_then(main_loop_simple) {
         Ok(_) => {}
