@@ -5,13 +5,13 @@ pub mod rtp_stream_record;
 pub mod rtp_udp_client_record;
 pub mod rtp_udp_server;
 
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{bounded, Receiver, Sender};
 
 use crate::{
     error::{MediaPipelineError, Result},
     main_loop::main_loop_simple,
 };
-use byte_slice_cast::{AsByteSlice, AsSliceOf};
+use byte_slice_cast::AsSliceOf;
 use bytes::BytesMut;
 use gstreamer::{element_error, parse_launch, prelude::*, Element, Pipeline};
 use gstreamer_app::{AppSink, AppSinkCallbacks};
@@ -21,7 +21,7 @@ use log::debug;
 pub(crate) fn create_pipeline(launch: &str) -> Result<Pipeline> {
     gstreamer::init()?;
 
-    let pipeline = parse_launch(&launch)
+    let pipeline = parse_launch(launch)
         .map_err(|e| MediaPipelineError::ParseLaunchError(e.to_string()))?
         .downcast::<Pipeline>()
         .map_err(|_| MediaPipelineError::CreatePipelineError)?;
@@ -57,7 +57,7 @@ fn appsink_pipeline(launch: &str, sender: Sender<BytesMut>) -> Result<gstreamer:
                     .pull_sample()
                     .map_err(|_| gstreamer::FlowError::Eos)?;
 
-                let buffer = sample.buffer().ok_or_else(|| {
+                let buffer = sample.buffer_owned().ok_or_else(|| {
                     element_error!(
                         appsink,
                         gstreamer::ResourceError::Failed,
@@ -98,10 +98,7 @@ fn appsink_pipeline(launch: &str, sender: Sender<BytesMut>) -> Result<gstreamer:
                 })?;
 
                 // not an error, just the receiver is no longer around
-                if sender
-                    .send(BytesMut::from(samples.to_owned().as_byte_slice()))
-                    .is_err()
-                {
+                if sender.send(BytesMut::from(samples)).is_err() {
                     log::info!("Receiver not able to receive bytes from the rtp stream");
                 };
 
@@ -115,17 +112,7 @@ fn appsink_pipeline(launch: &str, sender: Sender<BytesMut>) -> Result<gstreamer:
 }
 
 pub fn create_and_start_appsink_pipeline(launch: &str) -> Result<Receiver<BytesMut>> {
-    let (tx, rx) = unbounded::<BytesMut>();
-    let pipline = appsink_pipeline(launch, tx);
-    std::thread::spawn(move || match pipline.and_then(main_loop_simple) {
-        Ok(_) => {}
-        Err(err) => log::error!("pipeline error: {}", err),
-    });
-    Ok(rx)
-}
-
-pub fn create_and_start_appsink_pipeline_crossbeam(launch: &str) -> Result<Receiver<BytesMut>> {
-    let (tx, rx) = unbounded::<BytesMut>();
+    let (tx, rx) = bounded::<BytesMut>(100);
     let pipline = appsink_pipeline(launch, tx);
     std::thread::spawn(move || match pipline.and_then(main_loop_simple) {
         Ok(_) => {}
