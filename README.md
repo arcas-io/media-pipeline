@@ -2,6 +2,16 @@
 
 An abstraction over the [rust bindings](https://github.com/sdroege/gstreamer-rs) of GStreamer.
 
+## Install Dependencies
+On a Mac: 
+```shell
+brew install gstreamer gst-plugins-base gst-plugins-good \
+      gst-plugins-bad gst-plugins-ugly gst-libav gst-rtsp-server \
+      gst-editing-services --with-orc --with-libogg --with-opus \
+      --with-pango --with-theora --with-libvorbis --with-libvpx \
+      --enable-gtk3
+```
+
 ## Usage
 
 ### Read RTP from a Stream
