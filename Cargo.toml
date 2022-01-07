@@ -1,6 +1,6 @@
 [package]
 name = "media_pipeline"
-version = "0.1.0"
+version = "0.1.2"
 authors = ["David DiMaria <david.dimaria@conduit.vc>"]
 edition = "2018"
 
@@ -12,7 +12,7 @@ env_logger = "0.8.4"
 log = "0.4.14"
 gstreamer = "0.17"
 glib = "0.14"
-gstreamer-app = "0.17" 
+gstreamer-app = "0.17"
 gstreamer-base = "0.17"
 thiserror = "1.0"
 crossbeam-channel = "0.5.1"
