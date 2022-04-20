@@ -42,9 +42,9 @@ jobs:
 
       - name: Install gstreamer
         run: |
-          brew install gstreamer gst-plugins-base gst-plugins-good \
-          gst-plugins-bad gst-plugins-ugly gst-libav gst-rtsp-server \
-          gst-editing-services # --with-orc --with-libogg --with-opus \
+          brew install gstreamer
+          brew install gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
+          # --with-orc --with-libogg --with-opus \
           # --with-pango --with-theora --with-libvorbis --with-libvpx \
           # --enable-gtk3
           # brew install gstreamer gst-plugins-base gst-plugins-good gst-plugins-ugly gst-libav gst-rtsp-server gst-editing-services
