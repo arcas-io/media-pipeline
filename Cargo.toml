@@ -10,12 +10,12 @@ bytes = "1.0.1"
 byte-slice-cast = "1"
 env_logger = "0.8.4"
 log = "0.4.14"
-gstreamer = "0.17"
-glib = "0.14"
-gstreamer-app = "0.17"
-gstreamer-base = "0.17"
+gstreamer = "0.18"
+gstreamer-app = "0.18"
+gstreamer-base = "0.18"
 thiserror = "1.0"
 crossbeam-channel = "0.5.1"
+glib = "0.15.11"
 
 [features]
 test_udp_server = []
