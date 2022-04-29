@@ -26,4 +26,29 @@ jobs:
       - name: Test
         run: |
           cargo test
+  mac-x64-test:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with:
+          clean: false
 
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install gstreamer
+        run: |
+          curl -o gstreamer-1.18.6.pkg https://gstreamer.freedesktop.org/data/pkg/osx/1.18.4/gstreamer-1.0-1.18.4-x86_64.pkg
+          curl -o gstreamer-devel-1.18.6.pkg https://gstreamer.freedesktop.org/data/pkg/osx/1.18.4/gstreamer-1.0-devel-1.18.4-x86_64.pkg
+          sudo installer -pkg gstreamer-1.18.6.pkg -target /
+          sudo installer -pkg gstreamer-devel-1.18.6.pkg -target /
+          brew install pkg-config
+
+      - name: Test Code
+        run: |
+          export PKG_CONFIG_PATH="/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          cargo test
